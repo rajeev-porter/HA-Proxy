@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HAProxy Ingress · annotation test console</title>
+<style>
+  :root{
+    --bg:#0e1117; --panel:#161b22; --panel-2:#10151c; --line:#232b36;
+    --ink:#c9d4e0; --dim:#6b7888; --dimmer:#46505e;
+    --signal:#39d0d8; --signal-dim:#1c6f74;
+    --pass:#4ade80; --fail:#f76d6d; --wait:#e3b341;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:14px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--signal)}
+  code,kbd{font-family:var(--mono)}
+
+  /* ---- control rail ---- */
+  header{
+    position:sticky; top:0; z-index:10; background:rgba(14,17,23,.92);
+    backdrop-filter:blur(6px); border-bottom:1px solid var(--line);
+  }
+  .rail{max-width:1100px; margin:0 auto; padding:14px 20px;
+    display:flex; gap:18px; align-items:center; flex-wrap:wrap}
+  .brand{font-family:var(--mono); font-size:13px; letter-spacing:.02em; white-space:nowrap}
+  .brand b{color:var(--signal); font-weight:600}
+  .brand .v{color:var(--dim)}
+  .rail .grow{flex:1 1 240px; min-width:200px; display:flex; align-items:center; gap:8px}
+  .rail label{font-family:var(--mono); font-size:11px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em}
+  .rail input[type=text]{
+    flex:1; background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+    font-family:var(--mono); font-size:13px; padding:7px 10px; border-radius:6px; min-width:0;
+  }
+  .rail input[type=text]:focus{outline:none; border-color:var(--signal-dim)}
+  .wire{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px; color:var(--dim)}
+  .led{width:9px; height:9px; border-radius:50%; background:var(--dimmer); flex:none}
+  .led.up{background:var(--pass); box-shadow:0 0 8px var(--pass)}
+  .led.down{background:var(--fail); box-shadow:0 0 8px var(--fail)}
+  .led.busy{background:var(--wait); animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+
+  /* ---- intro ---- */
+  .intro{max-width:1100px; margin:0 auto; padding:30px 20px 6px}
+  .intro h1{font-family:var(--mono); font-weight:600; font-size:22px; margin:0 0 8px; letter-spacing:-.01em}
+  .intro h1 .pipe{color:var(--signal)}
+  .intro p{max-width:70ch; color:var(--dim); margin:0 0 6px}
+  .intro .hint{font-size:13px}
+
+  /* ---- grid of modules ---- */
+  main{max-width:1100px; margin:0 auto; padding:18px 20px 80px;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(420px,1fr)); gap:16px}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+
+  .mod{background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden;
+    display:flex; flex-direction:column}
+  .mod .top{display:flex; align-items:flex-start; gap:10px; padding:13px 15px; border-bottom:1px solid var(--line)}
+  .mod .top .n{font-family:var(--mono); color:var(--dimmer); font-size:12px; padding-top:2px; flex:none}
+  .mod .top .h{flex:1; min-width:0}
+  .mod h2{font-size:15px; margin:0 0 3px; font-weight:600}
+  .mod .key{font-family:var(--mono); font-size:12px; color:var(--signal); word-break:break-all}
+  .mod .scope{font-family:var(--mono); font-size:10px; color:var(--dim); border:1px solid var(--line);
+    padding:2px 6px; border-radius:4px; text-transform:uppercase; letter-spacing:.06em; flex:none}
+  .mod .body{padding:14px 15px; display:flex; flex-direction:column; gap:11px; flex:1}
+  .mod .desc{font-size:13px; color:var(--dim); margin:0}
+
+  .ctrls{display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end}
+  .field{display:flex; flex-direction:column; gap:4px}
+  .field label{font-family:var(--mono); font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.07em}
+  .field input,.field select{background:var(--panel-2); border:1px solid var(--line); color:var(--ink);
+    font-family:var(--mono); font-size:13px; padding:6px 9px; border-radius:6px; width:120px}
+  .field input:focus,.field select:focus{outline:none; border-color:var(--signal-dim)}
+  .field.wide input{width:100%}
+  .row{display:flex; gap:8px; align-items:center}
+  .check{display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:12px; color:var(--ink)}
+
+  button.run{font-family:var(--mono); font-size:12px; letter-spacing:.04em; cursor:pointer;
+    background:transparent; color:var(--signal); border:1px solid var(--signal-dim);
+    padding:7px 14px; border-radius:6px; transition:background .15s,color .15s}
+  button.run:hover{background:var(--signal-dim); color:#04181a}
+  button.run:disabled{opacity:.45; cursor:default}
+
+  .expect{font-size:12px; color:var(--dimmer); font-family:var(--mono)}
+  .expect b{color:var(--dim); font-weight:600}
+
+  /* ---- verdict + console output ---- */
+  .verdict{display:flex; align-items:center; gap:9px; font-family:var(--mono); font-size:12px;
+    margin-top:auto; padding-top:4px}
+  .badge{font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:.06em;
+    padding:3px 9px; border-radius:5px; border:1px solid; text-transform:uppercase}
+  .badge.idle{color:var(--dimmer); border-color:var(--line)}
+  .badge.pass{color:var(--pass); border-color:var(--pass)}
+  .badge.fail{color:var(--fail); border-color:var(--fail)}
+  .badge.info{color:var(--wait); border-color:var(--wait)}
+  .verdict .msg{color:var(--dim)}
+
+  .console{background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    font-family:var(--mono); font-size:12px; padding:9px 11px; min-height:34px;
+    white-space:pre-wrap; word-break:break-word; color:var(--dim); display:none}
+  .console.show{display:block}
+  .console .out{color:var(--ink)}
+  .console .req{color:var(--signal)}
+  .console .ok{color:var(--pass)}
+  .console .bad{color:var(--fail)}
+  .console .ln{display:block}
+
+  details.snip{border-top:1px dashed var(--line); padding-top:9px}
+  details.snip summary{font-family:var(--mono); font-size:11px; color:var(--dim); cursor:pointer; letter-spacing:.04em}
+  details.snip pre{background:var(--panel-2); border:1px solid var(--line); border-radius:6px;
+    padding:10px; overflow:auto; font-size:11.5px; color:var(--ink); margin:8px 0 0}
+
+  footer{max-width:1100px; margin:0 auto; padding:0 20px 60px; color:var(--dimmer); font-size:12px}
+  footer code{color:var(--dim)}
+
+  @media(prefers-reduced-motion:reduce){.led.busy{animation:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="rail">
+    <div class="brand"><b>haproxy</b>·annotation-console <span class="v">v1</span></div>
+    <div class="grow">
+      <label for="base">target</label>
+      <input id="base" type="text" spellcheck="false" placeholder="https://your-app.host">
+    </div>
+    <div class="wire">
+      <span id="wireLed" class="led"></span>
+      <span id="wireTxt">not checked</span>
+    </div>
+  </div>
+</header>
+
+<section class="intro">
+  <h1>Annotation test console <span class="pipe">//</span> HAProxy Ingress</h1>
+  <p>Each module fires a crafted request <b>through your ingress</b> and judges the response. Apply one annotation
+     at a time on your Ingress (or the Service, for Gateway API), redeploy, then re-run the matching module.</p>
+  <p class="hint">Point <b>target</b> at the host that routes to this app. Leave it blank to use this page's own
+     origin. Expand <b>show annotation</b> on any module to copy the exact YAML to apply.</p>
+</section>
+
+<main id="grid"></main>
+
+<footer>
+  Backend endpoints: <code>/api/ping</code> <code>/api/delay?ms=</code> <code>/api/echo</code>
+  <code>/api/headers</code> <code>/api/whoami</code> <code>/api/status?code=</code> <code>/api/size?bytes=</code>
+  <code>/api/auth</code>. Timeouts that need a slow <em>client</em> (timeout-client / timeout-connect) and
+  large-header buffer tests are easier from <code>scripts/test.sh</code> — see the README.
+</footer>
+
+<script>
+const $ = (s,r=document)=>r.querySelector(s);
+const base = () => ($('#base').value || '').replace(/\/+$/,'');
+const url  = p => base() + p;
+
+// ---- connectivity wire ----
+async function checkWire(){
+  const led=$('#wireLed'), txt=$('#wireTxt');
+  led.className='led busy'; txt.textContent='pinging…';
+  try{
+    const t=performance.now();
+    const r=await fetch(url('/api/ping'),{cache:'no-store'});
+    const ms=Math.round(performance.now()-t);
+    if(r.ok){led.className='led up'; const j=await r.json();
+      txt.textContent=`up · ${ms}ms · pod ${j.host}`;}
+    else{led.className='led down'; txt.textContent=`reachable · HTTP ${r.status}`;}
+  }catch(e){led.className='led down'; txt.textContent='unreachable';}
+}
+$('#base').addEventListener('change',checkWire);
+
+// ---- console helpers ----
+function line(kind,text){const s=document.createElement('span');s.className='ln '+(kind||'');s.textContent=text;return s;}
+function render(mod,verdict,msg,lines){
+  const b=$('.badge',mod), v=$('.msg',mod), c=$('.console',mod);
+  b.className='badge '+verdict;
+  b.textContent={pass:'pass',fail:'fail',info:'info',idle:'idle'}[verdict]||verdict;
+  v.textContent=msg||'';
+  c.innerHTML=''; c.className='console show';
+  (lines||[]).forEach(l=>c.appendChild(line(l[0],l[1])));
+}
+
+// timed fetch with optional client-side abort
+async function hit(path,opts={}){
+  const t=performance.now();
+  const ctrl=new AbortController();
+  let timedOut=false, tid=null;
+  if(opts.abortMs){tid=setTimeout(()=>{timedOut=true;ctrl.abort();},opts.abortMs);}
+  try{
+    const r=await fetch(url(path),{...opts,signal:ctrl.signal,cache:'no-store',redirect:opts.redirect||'follow'});
+    if(tid)clearTimeout(tid);
+    const ms=Math.round(performance.now()-t);
+    return {r,ms};
+  }catch(e){
+    if(tid)clearTimeout(tid);
+    const ms=Math.round(performance.now()-t);
+    return {err:e,ms,timedOut};
+  }
+}
+
+// ---- module definitions ----
+// Each module: id, n (number), title, key (annotation), scope, desc, controls (html),
+// expect (string), snippet (yaml), run(mod) -> renders verdict.
+const MODULES = [
+ {
+  n:'01', title:'Connectivity & request ID', scope:'global',
+  key:'config-frontend: unique-id-header X-Request-ID',
+  desc:'Baseline. Confirms the route works and that HAProxy stamps a request ID (per the doc\u2019s config-frontend snippet).',
+  ctrls:`<button class="run">send ping</button>`,
+  expect:'Expect <b>200</b> and a non-empty X-Request-ID.',
+  snippet:`# Porter dashboard \u2192 paste into ConfigMap/global, or it ships in the doc\u2019s values\ncontroller:\n  config:\n    config-frontend: |\n      unique-id-format %[uuid]\n      unique-id-header X-Request-ID`,
+  run: async (m)=>{
+    const {r,ms,err}=await hit('/api/ping');
+    if(err) return render(m,'fail','request failed',[['req','\u2192 GET /api/ping'],['bad','\u2715 '+err.message]]);
+    const j=await r.json(); const rid=j.request_id||r.headers.get('X-Request-ID')||'';
+    render(m, r.ok?(rid?'pass':'info'):'fail',
+      r.ok?(rid?'route + request ID present':'route ok, no request-ID header'):'unexpected status',
+      [['req','\u2192 GET /api/ping'],[r.ok?'ok':'bad',`\u2190 ${r.status} in ${ms}ms \u00b7 pod ${j.host}`],
+       ['out',`request_id: ${rid||'(none \u2014 add the config-frontend snippet)'}`]]);
+  }
+ },
+ {
+  n:'02', title:'Read / server timeout', scope:'backend',
+  key:'haproxy-ingress.github.io/timeout-server',
+  desc:'Backend sleeps for the chosen delay. If it exceeds timeout-server, HAProxy returns 504 before the backend replies.',
+  ctrls:`<div class="field"><label>backend delay (ms)</label><input class="delay" type="number" value="8000" min="0" step="500"></div><button class="run">send slow request</button>`,
+  expect:'Set <b>timeout-server</b> below the delay \u2192 <b>504</b>. Above \u2192 <b>200</b>.',
+  snippet:`haproxy-ingress.github.io/timeout-server: "5s"`,
+  run: async (m)=>{
+    const ms=parseInt($('.delay',m).value||'0',10);
+    render(m,'info','running\u2026',[['req',`\u2192 GET /api/delay?ms=${ms}`]]);
+    const {r,ms:took,err}=await hit('/api/delay?ms='+ms,{abortMs:ms+30000});
+    if(err) return render(m,'info','connection dropped',[['req',`\u2192 GET /api/delay?ms=${ms}`],['bad',`\u2715 aborted after ${took}ms`]]);
+    if([502,503,504].includes(r.status)) render(m,'pass',`HAProxy returned ${r.status} \u2014 timeout enforced`,[['req',`\u2192 GET /api/delay?ms=${ms}`],['ok',`\u2190 ${r.status} in ${took}ms (cut before backend replied)`]]);
+    else if(r.ok) render(m,'info','backend replied \u2014 timeout not hit',[['req',`\u2192 GET /api/delay?ms=${ms}`],['out',`\u2190 ${r.status} in ${took}ms (raise delay above timeout-server, or it isn\u2019t applied)`]]);
+    else render(m,'fail',`unexpected ${r.status}`,[['req',`\u2192 GET /api/delay?ms=${ms}`],['bad',`\u2190 ${r.status} in ${took}ms`]]);
+  }
+ },
+ {
+  n:'03', title:'Request body size', scope:'path',
+  key:'haproxy-ingress.github.io/proxy-body-size',
+  desc:'POSTs a payload of the chosen size. Over the limit, HAProxy rejects it with 413. (The doc\u2019s "maxbody-size" is a typo \u2014 real key is proxy-body-size.)',
+  ctrls:`<div class="field"><label>payload (KB)</label><input class="kb" type="number" value="2048" min="1" step="64"></div><button class="run">post payload</button>`,
+  expect:'Set <b>proxy-body-size</b> below the payload \u2192 <b>413</b>. Above \u2192 <b>200</b>.',
+  snippet:`haproxy-ingress.github.io/proxy-body-size: "1m"   # accepts k, m, g`,
+  run: async (m)=>{
+    const kb=parseInt($('.kb',m).value||'1',10); const body=new Uint8Array(kb*1024);
+    render(m,'info','uploading\u2026',[['req',`\u2192 POST /api/echo (${kb} KB)`]]);
+    const {r,ms,err}=await hit('/api/echo',{method:'POST',body});
+    if(err) return render(m,'info','upload aborted',[['req',`\u2192 POST /api/echo (${kb} KB)`],['bad',`\u2715 ${err.message} after ${ms}ms`]]);
+    if(r.status===413) render(m,'pass','413 \u2014 body limit enforced',[['req',`\u2192 POST /api/echo (${kb} KB)`],['ok',`\u2190 413 in ${ms}ms`]]);
+    else if(r.ok){const j=await r.json(); render(m,'info','accepted \u2014 under the limit',[['req',`\u2192 POST /api/echo (${kb} KB)`],['out',`\u2190 200 in ${ms}ms \u00b7 received_bytes=${j.received_bytes}`]]);}
+    else render(m,'fail',`unexpected ${r.status}`,[['req',`\u2192 POST /api/echo (${kb} KB)`],['bad',`\u2190 ${r.status} in ${ms}ms`]]);
+  }
+ },
+ {
+  n:'04', title:'Rate limit (requests/sec)', scope:'backend',
+  key:'haproxy-ingress.github.io/limit-rps',
+  desc:'Fires a burst within one second. Past limit-rps, HAProxy denies the surplus (commonly 403) while serving the rest.',
+  ctrls:`<div class="field"><label>burst size</label><input class="burst" type="number" value="30" min="2" max="300"></div><button class="run">fire burst</button>`,
+  expect:'With <b>limit-rps</b> set, expect a mix of 200 + denied. Denials &gt; 0 = working.',
+  snippet:`haproxy-ingress.github.io/limit-rps: "10"\n# optional exemption:\n# haproxy-ingress.github.io/limit-whitelist: "10.0.0.0/8"`,
+  run: async (m)=>{
+    const n=Math.min(300,Math.max(2,parseInt($('.burst',m).value||'2',10)));
+    render(m,'info',`firing ${n}\u2026`,[['req',`\u2192 ${n}\u00d7 GET /api/ping`]]);
+    const res=await Promise.all(Array.from({length:n},()=>hit('/api/ping')));
+    const t={}; res.forEach(x=>{const k=x.err?'ERR':x.r.status; t[k]=(t[k]||0)+1;});
+    const denied=['403','429','503'].reduce((a,k)=>a+(t[k]||0),0);
+    const sum=Object.entries(t).map(([k,v])=>`${k}:${v}`).join('  ');
+    render(m, denied>0?'pass':'info', denied>0?`${denied}/${n} denied \u2014 rate limit active`:'no denials \u2014 limit not hit',
+      [['req',`\u2192 ${n}\u00d7 /api/ping`],[denied>0?'ok':'out',`\u2190 ${sum}`]]);
+  }
+ },
+ {
+  n:'05', title:'Concurrent connection limit', scope:'backend',
+  key:'haproxy-ingress.github.io/limit-connections',
+  desc:'Opens many slow requests at once. Beyond limit-connections, HAProxy refuses or queues the extras.',
+  ctrls:`<div class="field"><label>parallel</label><input class="par" type="number" value="20" min="2" max="100"></div><div class="field"><label>hold (ms)</label><input class="hold" type="number" value="3000" min="500" step="500"></div><button class="run">open connections</button>`,
+  expect:'With <b>limit-connections</b> set, expect some requests denied or markedly delayed.',
+  snippet:`haproxy-ingress.github.io/limit-connections: "5"`,
+  run: async (m)=>{
+    const n=Math.min(100,Math.max(2,parseInt($('.par',m).value||'2',10))); const hold=parseInt($('.hold',m).value||'1000',10);
+    render(m,'info',`holding ${n} open\u2026`,[['req',`\u2192 ${n}\u00d7 GET /api/delay?ms=${hold}`]]);
+    const res=await Promise.all(Array.from({length:n},()=>hit('/api/delay?ms='+hold,{abortMs:hold+30000})));
+    const t={}; res.forEach(x=>{const k=x.err?'ERR':x.r.status; t[k]=(t[k]||0)+1;});
+    const denied=['403','429','503','ERR'].reduce((a,k)=>a+(t[k]||0),0);
+    const sum=Object.entries(t).map(([k,v])=>`${k}:${v}`).join('  ');
+    render(m, denied>0?'pass':'info', denied>0?`${denied}/${n} blocked \u2014 cap active`:'all passed \u2014 cap not hit',
+      [['req',`\u2192 ${n}\u00d7 /api/delay?ms=${hold}`],[denied>0?'ok':'out',`\u2190 ${sum}`]]);
+  }
+ },
+ {
+  n:'06', title:'Basic authentication', scope:'path',
+  key:'haproxy-ingress.github.io/auth-secret',
+  desc:'Sends a request with or without credentials. With basic auth in front, HAProxy answers 401 itself when credentials are missing.',
+  ctrls:`<label class="check"><input class="sendcreds" type="checkbox"> send credentials</label><div class="field"><label>user</label><input class="user" type="text" value="admin" style="width:90px"></div><div class="field"><label>password</label><input class="pw" type="text" value="secret" style="width:90px"></div><button class="run">request</button>`,
+  expect:'No creds \u2192 <b>401</b>. Correct creds \u2192 <b>200</b>.',
+  snippet:`# create the secret first:\n#   htpasswd -nbB admin secret > auth\n#   kubectl create secret generic app-basic-auth --from-file=auth\nhaproxy-ingress.github.io/auth-secret: "app-basic-auth"\nhaproxy-ingress.github.io/auth-realm: "Restricted"`,
+  run: async (m)=>{
+    const send=$('.sendcreds',m).checked; const h={};
+    if(send) h['Authorization']='Basic '+btoa($('.user',m).value+':'+$('.pw',m).value);
+    const {r,ms,err}=await hit('/api/auth',{headers:h});
+    if(err) return render(m,'fail','request failed',[['bad','\u2715 '+err.message]]);
+    if(!send && r.status===401) render(m,'pass','401 without credentials \u2014 auth enforced',[['req','\u2192 GET /api/auth (no creds)'],['ok',`\u2190 401 in ${ms}ms`]]);
+    else if(send && r.ok) render(m,'pass','authenticated request reached backend',[['req','\u2192 GET /api/auth (creds)'],['ok',`\u2190 ${r.status} in ${ms}ms`]]);
+    else if(!send && r.ok) render(m,'info','reached backend without creds \u2014 auth not applied',[['req','\u2192 GET /api/auth (no creds)'],['out',`\u2190 ${r.status} in ${ms}ms`]]);
+    else render(m,'info',`status ${r.status}`,[['req','\u2192 GET /api/auth'],['out',`\u2190 ${r.status} (check secret / credentials)`]]);
+  }
+ },
+ {
+  n:'07', title:'Custom request header \u2192 backend', scope:'backend',
+  key:'haproxy-ingress.github.io/headers',
+  desc:'The headers key injects headers into the request HAProxy sends to the backend. This reads them back via /api/headers (what the backend received).',
+  ctrls:`<div class="field wide" style="flex:1"><label>request header name to check</label><input class="hname" type="text" value="X-From-Haproxy" style="width:100%"></div><button class="run">inspect request</button>`,
+  expect:'Expect the named header present in what the backend received.',
+  snippet:`haproxy-ingress.github.io/headers: |\n  X-From-Haproxy: porter\n  X-Env: test`,
+  run: async (m)=>{
+    const name=($('.hname',m).value||'').trim().toLowerCase();
+    const {r,err}=await hit('/api/headers');
+    if(err) return render(m,'fail','request failed',[['bad','\u2715 '+err.message]]);
+    const j=await r.json(); const keys=Object.keys(j.headers||{});
+    const hit_=keys.find(k=>k.toLowerCase()===name);
+    if(hit_) render(m,'pass',`"${hit_}" reached backend`,[['req','\u2192 GET /api/headers'],['ok',`\u2190 ${hit_}: ${j.headers[hit_]}`]]);
+    else render(m,'info',`"${name}" not in request`,[['req','\u2192 GET /api/headers'],['out',`\u2190 backend saw: ${keys.join(', ')}`]]);
+  }
+ },
+ {
+  n:'08', title:'Custom response header \u2192 client', scope:'backend',
+  key:'config-backend: http-response set-header',
+  desc:'Response headers to the client aren\u2019t the headers key \u2014 use a config-backend snippet. This reads the header off the response.',
+  ctrls:`<div class="field wide" style="flex:1"><label>response header name to check</label><input class="rname" type="text" value="X-Resp-Test" style="width:100%"></div><button class="run">read response</button>`,
+  expect:'Expect the named header present on the response.',
+  snippet:`haproxy-ingress.github.io/config-backend: |\n  http-response set-header X-Resp-Test porter-haproxy`,
+  run: async (m)=>{
+    const name=($('.rname',m).value||'').trim();
+    const {r,err}=await hit('/api/ping');
+    if(err) return render(m,'fail','request failed',[['bad','\u2715 '+err.message]]);
+    const v=r.headers.get(name);
+    if(v) render(m,'pass',`"${name}" present`,[['req','\u2192 GET /api/ping'],['ok',`\u2190 ${name}: ${v}`]]);
+    else render(m,'info',`"${name}" not seen`,[['req','\u2192 GET /api/ping'],['out','\u2190 absent (apply the config-backend snippet; keep target same-origin so the browser exposes it)']]);
+  }
+ },
+ {
+  n:'09', title:'HSTS header', scope:'path',
+  key:'haproxy-ingress.github.io/hsts',
+  desc:'Over HTTPS, HAProxy should add Strict-Transport-Security. Run with target on an https host.',
+  ctrls:`<button class="run">check HSTS</button>`,
+  expect:'Over HTTPS expect <b>Strict-Transport-Security</b> with your max-age.',
+  snippet:`haproxy-ingress.github.io/hsts: "true"\nhaproxy-ingress.github.io/hsts-max-age: "31536000"\nhaproxy-ingress.github.io/hsts-include-subdomains: "true"`,
+  run: async (m)=>{
+    const https=base()? base().startsWith('https'): location.protocol==='https:';
+    const {r,err}=await hit('/api/ping');
+    if(err) return render(m,'fail','request failed',[['bad','\u2715 '+err.message]]);
+    const h=r.headers.get('Strict-Transport-Security');
+    if(h) render(m,'pass','HSTS present',[['req','\u2192 GET /api/ping'],['ok',`\u2190 Strict-Transport-Security: ${h}`]]);
+    else render(m,'info', https?'no HSTS header seen':'target is not https \u2014 HSTS only applies over TLS',[['req','\u2192 GET /api/ping'],['out',`\u2190 absent${https?' (apply the hsts key)':' (switch target to https://)'}`]]);
+  }
+ },
+ {
+  n:'10', title:'SSL redirect', scope:'path',
+  key:'haproxy-ingress.github.io/ssl-redirect',
+  desc:'Requests the http form and checks it lands on https.',
+  ctrls:`<button class="run">test http\u2192https</button>`,
+  expect:'With <b>ssl-redirect: "true"</b>, an http request should end on <b>https</b>.',
+  snippet:`haproxy-ingress.github.io/ssl-redirect: "true"`,
+  run: async (m)=>{
+    let host=base()||location.origin; const httpUrl=host.replace(/^https:/,'http:').replace(/\/+$/,'')+'/api/ping';
+    render(m,'info','requesting http\u2026',[['req',`\u2192 GET ${httpUrl}`]]);
+    try{ const r=await fetch(httpUrl,{cache:'no-store',redirect:'follow'}); const landed=r.url||'';
+      if(landed.startsWith('https')) render(m,'pass','redirected to https',[['req',`\u2192 GET ${httpUrl}`],['ok',`\u2190 final ${landed}`]]);
+      else render(m,'info','no upgrade to https',[['req',`\u2192 GET ${httpUrl}`],['out',`\u2190 final ${landed||'(opaque)'} \u2014 apply ssl-redirect, or browser blocked the hop`]]);
+    }catch(e){ render(m,'info','cross-scheme request blocked',[['req',`\u2192 GET ${httpUrl}`],['out','\u2715 '+e.message+' \u2014 verify with curl -sI']]); }
+  }
+ },
+ {
+  n:'11', title:'App-root redirect', scope:'host',
+  key:'haproxy-ingress.github.io/app-root',
+  desc:'When set, a request to "/" gets a 302 to the configured subpath. This requests "/" and checks for the redirect.',
+  ctrls:`<button class="run">request /</button>`,
+  expect:'Expect the request to <b>/</b> to redirect (302) to your app-root path.',
+  snippet:`haproxy-ingress.github.io/app-root: "/app"`,
+  run: async (m)=>{
+    let host=base()||location.origin; const u=host.replace(/\/+$/,'')+'/';
+    try{ const r=await fetch(u,{cache:'no-store',redirect:'follow'});
+      if(r.redirected){ const p=new URL(r.url).pathname; render(m,'pass','/ redirected',[['req','\u2192 GET /'],['ok',`\u2190 landed on ${p}`]]); }
+      else render(m,'info','/ not redirected',[['req','\u2192 GET /'],['out','\u2190 no redirect (apply app-root)']]);
+    }catch(e){ render(m,'fail','request failed',[['bad','\u2715 '+e.message]]); }
+  }
+ },
+ {
+  n:'12', title:'Permanent / temporary redirect', scope:'path',
+  key:'haproxy-ingress.github.io/redirect-to (+ redirect-to-code)',
+  desc:'Redirects matching requests to a target URL. This requests a path and reports whether HAProxy redirected it.',
+  ctrls:`<div class="field wide" style="flex:1"><label>request path</label><input class="rpath" type="text" value="/api/ping" style="width:100%"></div><button class="run">trace redirect</button>`,
+  expect:'With <b>redirect-to</b> set, expect the request to end on your target URL (301/302).',
+  snippet:`haproxy-ingress.github.io/redirect-to: "https://example.com"\nhaproxy-ingress.github.io/redirect-to-code: "301"`,
+  run: async (m)=>{
+    const p=$('.rpath',m).value||'/api/ping';
+    try{ const r=await fetch(url(p),{cache:'no-store',redirect:'follow'});
+      if(r.redirected) render(m,'pass','redirected',[['req',`\u2192 GET ${p}`],['ok',`\u2190 landed on ${r.url}`]]);
+      else render(m,'info','not redirected',[['req',`\u2192 GET ${p}`],['out',`\u2190 ${r.status} \u2014 apply redirect-to`]]);
+    }catch(e){ render(m,'fail','request failed',[['bad','\u2715 '+e.message]]); }
+  }
+ },
+ {
+  n:'13', title:'Rewrite target', scope:'path',
+  key:'haproxy-ingress.github.io/rewrite-target',
+  desc:'Asks the backend which path it actually received. With rewrite-target, that differs from the path you requested.',
+  ctrls:`<div class="field wide" style="flex:1"><label>request path</label><input class="path" type="text" value="/api/whoami" style="width:100%"></div><button class="run">trace path</button>`,
+  expect:'Backend\u2019s reported <b>path</b> should reflect the rewrite, not the URL you requested.',
+  snippet:`haproxy-ingress.github.io/rewrite-target: /\n# requested /app/api/whoami  \u2192  backend sees /api/whoami`,
+  run: async (m)=>{
+    const p=$('.path',m).value||'/api/whoami'; const {r,err}=await hit(p);
+    if(err) return render(m,'fail','request failed',[['req',`\u2192 GET ${p}`],['bad','\u2715 '+err.message]]);
+    if(r.ok){const j=await r.json(); render(m,'info','path traced',[['req',`\u2192 GET ${p}`],['out',`\u2190 backend saw path: ${j.path} query: ${j.query||''}`]]);}
+    else render(m,'info',`status ${r.status}`,[['req',`\u2192 GET ${p}`],['out',`\u2190 ${r.status} (path may not route \u2014 expected with some rewrites)`]]);
+  }
+ },
+ {
+  n:'14', title:'Source IP allowlist', scope:'path',
+  key:'haproxy-ingress.github.io/allowlist-source-range',
+  desc:'IP allow/deny uses your real source IP (a browser can\u2019t spoof it). This exercises allowlist-source-header, where HAProxy reads the IP from a header you name.',
+  ctrls:`<div class="field"><label>header</label><input class="ah" type="text" value="X-Client-IP" style="width:120px"></div><div class="field"><label>value</label><input class="av" type="text" value="10.0.0.9" style="width:120px"></div><button class="run">send as IP</button>`,
+  expect:'In-range \u2192 <b>200</b>. Out-of-range \u2192 <b>403</b>. Plain range needs curl from the IP.',
+  snippet:`# range (test from the real IP via curl):\nhaproxy-ingress.github.io/allowlist-source-range: "10.0.0.0/8"\n# OR read the IP from a header (testable here):\nhaproxy-ingress.github.io/allowlist-source-header: "X-Client-IP"`,
+  run: async (m)=>{
+    const h=$('.ah',m).value||'X-Client-IP', v=$('.av',m).value||'';
+    const {r,ms,err}=await hit('/api/ping',{headers:{[h]:v}});
+    if(err) return render(m,'fail','request failed',[['bad','\u2715 '+err.message]]);
+    if(r.status===403) render(m,'pass','403 \u2014 denied as out-of-range',[['req',`\u2192 GET /api/ping (${h}: ${v})`],['ok',`\u2190 403 in ${ms}ms`]]);
+    else if(r.ok) render(m,'info','allowed through',[['req',`\u2192 GET /api/ping (${h}: ${v})`],['out',`\u2190 ${r.status} \u2014 value inside range (or not applied)`]]);
+    else render(m,'info',`status ${r.status}`,[['req','\u2192 GET /api/ping'],['out',`\u2190 ${r.status}`]]);
+  }
+ },
+ {
+  n:'15', title:'CORS', scope:'path',
+  key:'haproxy-ingress.github.io/cors-enable (+ cors-allow-origin)',
+  desc:'Real CORS only happens cross-origin. Point target at the app host while viewing this console from a DIFFERENT origin, then run.',
+  ctrls:`<button class="run">cross-origin fetch</button>`,
+  expect:'With CORS enabled for your origin, the cross-origin fetch <b>succeeds</b>. Without it, the browser <b>blocks</b> it.',
+  snippet:`haproxy-ingress.github.io/cors-enable: "true"\nhaproxy-ingress.github.io/cors-allow-origin: "*"\nhaproxy-ingress.github.io/cors-allow-methods: "GET, POST, OPTIONS"`,
+  run: async (m)=>{
+    const t=base(); const sameOrigin = !t || t===location.origin;
+    if(sameOrigin) return render(m,'info','same-origin \u2014 CORS not exercised',[['out','set target to the app host and open this console from a different origin (or use scripts/test.sh cors)']]);
+    try{ const r=await fetch(t.replace(/\/+$/,'')+'/api/ping',{mode:'cors',cache:'no-store'});
+      const acao=r.headers.get('Access-Control-Allow-Origin');
+      render(m,'pass','cross-origin request allowed',[['req',`\u2192 GET ${t}/api/ping (cross-origin)`],['ok',`\u2190 ${r.status}${acao?` \u00b7 ACAO: ${acao}`:''}`]]);
+    }catch(e){ render(m,'info','blocked by browser \u2014 CORS not enabled for this origin',[['req',`\u2192 GET ${t}/api/ping (cross-origin)`],['out','\u2715 '+e.message+' (apply cors-enable + allow your origin)']]); }
+  }
+ },
+ {
+  n:'16', title:'Load balancing across pods', scope:'backend',
+  key:'haproxy-ingress.github.io/balance-algorithm',
+  desc:'Fires many requests and counts distinct pods that answered. Needs 2+ replicas (scale in Porter). Shows the spread.',
+  ctrls:`<div class="field"><label>requests</label><input class="lbn" type="number" value="30" min="2" max="200"></div><button class="run">probe pods</button>`,
+  expect:'roundrobin/leastconn \u2192 requests spread across <b>multiple pods</b>.',
+  snippet:`haproxy-ingress.github.io/balance-algorithm: "roundrobin"  # or leastconn, random`,
+  run: async (m)=>{
+    const n=Math.min(200,Math.max(2,parseInt($('.lbn',m).value||'2',10)));
+    render(m,'info',`probing ${n}\u2026`,[['req',`\u2192 ${n}\u00d7 GET /api/whoami`]]);
+    const res=await Promise.all(Array.from({length:n},()=>hit('/api/whoami')));
+    const pods={}; for(const x of res){ if(x.err) continue; try{const j=await x.r.json(); pods[j.host]=(pods[j.host]||0)+1;}catch(e){} }
+    const names=Object.keys(pods); const sum=Object.entries(pods).map(([k,v])=>`${k}:${v}`).join('  ');
+    render(m, names.length>1?'pass':'info', names.length>1?`spread across ${names.length} pods`:'all hit one pod',
+      [['req',`\u2192 ${n}\u00d7 /api/whoami`],[names.length>1?'ok':'out',`\u2190 ${sum||'(no pod info)'}`],
+       names.length<=1?['out','scale to 2+ replicas in Porter to see balancing']:['out','']]);
+  }
+ },
+ {
+  n:'17', title:'Sticky sessions (affinity)', scope:'backend',
+  key:'haproxy-ingress.github.io/affinity: cookie',
+  desc:'Sends a warm-up (to receive HAProxy\u2019s affinity cookie), then repeats with cookies on. With affinity, every follow-up should pin to ONE pod.',
+  ctrls:`<div class="field"><label>requests</label><input class="afn" type="number" value="20" min="2" max="100"></div><button class="run">test stickiness</button>`,
+  expect:'With <b>affinity: cookie</b>, all cookie-bearing requests hit <b>one pod</b>. Needs 2+ replicas to be meaningful.',
+  snippet:`haproxy-ingress.github.io/affinity: "cookie"\nhaproxy-ingress.github.io/session-cookie-name: "INGRESSCOOKIE"`,
+  run: async (m)=>{
+    const n=Math.min(100,Math.max(2,parseInt($('.afn',m).value||'2',10)));
+    render(m,'info','warming up\u2026',[['req','\u2192 GET /api/whoami (warm-up, sets cookie)']]);
+    try{ await fetch(url('/api/whoami'),{cache:'no-store',credentials:'include'}); }catch(e){}
+    const res=await Promise.all(Array.from({length:n},()=>fetch(url('/api/whoami'),{cache:'no-store',credentials:'include'}).then(r=>r.json()).catch(()=>null)));
+    const pods={}; res.forEach(j=>{ if(j&&j.host) pods[j.host]=(pods[j.host]||0)+1; });
+    const names=Object.keys(pods); const sum=Object.entries(pods).map(([k,v])=>`${k}:${v}`).join('  ');
+    if(names.length===1) render(m,'pass','pinned to one pod \u2014 affinity active',[['req',`\u2192 ${n}\u00d7 /api/whoami (cookie)`],['ok',`\u2190 ${sum}`]]);
+    else render(m,'info',`spread across ${names.length} pods \u2014 not sticky`,[['req',`\u2192 ${n}\u00d7 /api/whoami (cookie)`],['out',`\u2190 ${sum} (apply affinity, or only 1 replica exists)`]]);
+  }
+ },
+ {
+  n:'18', title:'WAF / ModSecurity', scope:'path',
+  key:'haproxy-ingress.github.io/waf: modsecurity',
+  desc:'Sends a request with an obvious attack pattern. With the WAF active, HAProxy/ModSecurity returns 403 before the backend. (Requires modsecurity-endpoints configured.)',
+  ctrls:`<button class="run">send attack pattern</button>`,
+  expect:'With the WAF on, the malicious request is <b>403</b>. Off, it reaches the backend (<b>200</b>).',
+  snippet:`haproxy-ingress.github.io/waf: "modsecurity"\n# global: modsecurity-endpoints: "<modsec-svc>:12345"`,
+  run: async (m)=>{
+    const attack="/api/ping?q="+encodeURIComponent("1' OR '1'='1");
+    const {r,ms,err}=await hit(attack);
+    if(err) return render(m,'fail','request failed',[['bad','\u2715 '+err.message]]);
+    if(r.status===403) render(m,'pass','403 \u2014 WAF blocked the payload',[['req','\u2192 GET /api/ping?q=1\u2019 OR \u20191\u2019=\u20191'],['ok',`\u2190 403 in ${ms}ms`]]);
+    else render(m,'info','payload reached backend \u2014 WAF not blocking',[['req','\u2192 GET /api/ping?q=1\u2019 OR \u20191\u2019=\u20191'],['out',`\u2190 ${r.status} in ${ms}ms (enable waf + modsecurity-endpoints)`]]);
+  }
+ },
+ {
+  n:'19', title:'Forwarded headers', scope:'global',
+  key:'forwardfor / use-forwarded-proto',
+  desc:'Reads what HAProxy forwards to the backend: X-Forwarded-For, X-Real-IP, X-Forwarded-Proto.',
+  ctrls:`<button class="run">inspect forwarded</button>`,
+  expect:'Expect <b>X-Forwarded-For</b> / <b>X-Real-IP</b> populated.',
+  snippet:`# usually on by default; relevant keys:\n#   forwardfor: "add"  (global ConfigMap)\n#   use-forwarded-proto: "true"`,
+  run: async (m)=>{
+    const {r,err}=await hit('/api/whoami');
+    if(err) return render(m,'fail','request failed',[['bad','\u2715 '+err.message]]);
+    const j=await r.json(); const has=j.x_forwarded_for||j.x_real_ip;
+    render(m, has?'pass':'info', has?'forwarded headers present':'no forwarded headers seen',
+      [['req','\u2192 GET /api/whoami'],[has?'ok':'out',`\u2190 X-Forwarded-For: ${j.x_forwarded_for||'(none)'}`],['out',`   X-Real-IP: ${j.x_real_ip||'(none)'}  X-Forwarded-Host: ${j.x_forwarded_host||'(none)'}`]]);
+  }
+ },
+ {
+  n:'20', title:'Not browser-testable \u2014 use the CLI', scope:'cli',
+  key:'timeout-connect \u00b7 timeout-client \u00b7 buffer-size \u00b7 ssl-ciphers \u00b7 auth-tls (mTLS)',
+  desc:'These need a slow/low-level client a browser can\u2019t be: slow TCP connect, drip-fed uploads, oversized request headers, cipher negotiation, client certificates. Drive them from scripts/test.sh.',
+  ctrls:`<button class="run" disabled>see scripts/test.sh</button>`,
+  expect:'Run: <b>./scripts/test.sh https://your-app.host</b> \u2014 sections timeout_client, bigheader, cors.',
+  snippet:`# slow-client timeout\nhaproxy-ingress.github.io/timeout-client: "5s"\n# header buffer (global tuning, not a per-route key)\nglobal-config-snippet: | \n  tune.bufsize 16384\n# TLS ciphers / mTLS\nhaproxy-ingress.github.io/ssl-ciphers: "ECDHE-..."\nhaproxy-ingress.github.io/auth-tls-secret: "ns/ca-secret"`,
+  run: async (m)=>{ render(m,'info','CLI only',[['out','these are covered by scripts/test.sh \u2014 see the README']]); }
+ },
+];
+
+// ---- build the grid ----
+
+const grid=$('#grid');
+for(const mod of MODULES){
+  const el=document.createElement('section');
+  el.className='mod';
+  el.innerHTML=`
+    <div class="top">
+      <span class="n">${mod.n}</span>
+      <div class="h"><h2>${mod.title}</h2><div class="key">${mod.key}</div></div>
+      <span class="scope">${mod.scope}</span>
+    </div>
+    <div class="body">
+      <p class="desc">${mod.desc}</p>
+      <div class="ctrls">${mod.ctrls}</div>
+      <div class="expect">${mod.expect}</div>
+      <div class="console"></div>
+      <div class="verdict"><span class="badge idle">idle</span><span class="msg"></span></div>
+      <details class="snip"><summary>show annotation to apply</summary><pre>${mod.snippet.replace(/</g,'&lt;')}</pre></details>
+    </div>`;
+  const btn=$('.run',el);
+  btn.addEventListener('click',async()=>{
+    btn.disabled=true; const old=btn.textContent; btn.textContent='running\u2026';
+    try{ await mod.run(el); }
+    catch(e){ render(el,'fail','console error',[['bad','\u2715 '+e.message]]); }
+    finally{ btn.disabled=false; btn.textContent=old; }
+  });
+  grid.appendChild(el);
+}
+
+// initial wire check against same origin
+checkWire();
+</script>
+</body>
+</html>
