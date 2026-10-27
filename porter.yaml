@@ -11,4 +11,4 @@ services:
       - path: /fuckme
         port: 8080
     pathRoutingConfig:
-      rewriteMode: rewrite-off
+      rewriteMode: rewrite-prefix
