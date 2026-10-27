@@ -6,7 +6,8 @@ services:
     pathRouting:
       - path: /
         port: 3000
-        serviceName: rajeev-k8s-136-web
+        appName: rajeev-k8s-136
+        serviceName: web
       - path: /fuckme
         port: 8080
     pathRoutingConfig:
