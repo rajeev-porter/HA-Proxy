@@ -6,5 +6,7 @@ services:
       - path: /
         port: 3000
         serviceName: rajeev-k8s-136-web
+      - path: /fuckme
+        port: 8080
     pathRoutingConfig:
       rewriteMode: rewrite-off
