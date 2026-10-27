@@ -2,6 +2,7 @@ version: v2
 name: ha-proxy
 services:
   - name: web
+    port: 8080
     pathRouting:
       - path: /
         port: 3000
